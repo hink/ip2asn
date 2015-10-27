@@ -33,5 +33,5 @@ In order to build, you must have a properly installed and configured installatio
 git clone https://github.firehost.co/chinkley/ip2asn.git
 cd ip2asn
 go get "github.com/codegangsta/cli"
-go build ip2asn.go result.go
+go build && go install
 ```
