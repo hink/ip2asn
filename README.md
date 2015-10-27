@@ -35,3 +35,7 @@ cd ip2asn
 go get "github.com/codegangsta/cli"
 go build && go install
 ```
+
+## Note (From Team Cymru's Website)
+
+IPs that are seen abusing the whois server with large numbers of individual queries instead of using the bulk netcat interface will be null routed. If at all possible you should consider using the DNS based query interface since it is much more efficient for individual queries. The netcat interface should be used for large groups of IP lists at a time in one single TCP query.
