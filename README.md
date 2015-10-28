@@ -2,6 +2,8 @@
 
 IP2ASN takes a list of domains and resolves their ASN information using [Team Cymru's IP to ASN Mapping Service](http://www.team-cymru.org/IP-ASN-mapping.html#whois)
 
+This implementation uses the [WHOIS](http://www.team-cymru.org/IP-ASN-mapping.html#whois) interface which is not mean for large numbers of individual queries.
+
 ## Usage
 
 This application take a newline separated list of domains
