@@ -7,20 +7,20 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"regexp"
 	"sort"
 
 	"github.com/codegangsta/cli"
+	log "github.com/sirupsen/logrus"
 )
 
-// RemoteHost TeamCymru's remote WHOIS service FQDN
-const RemoteHost = "whois.cymru.com"
-
-// RemotePort TeamCymru's remote WHOIS service port
-const RemotePort = 43
+// ip2asn constants
+const (
+	RemoteHost = "whois.cymru.com" // RemoteHost TeamCymru's remote WHOIS service FQDN
+	RemotePort = 43                // RemotePort TeamCymru's remote WHOIS service port
+)
 
 // CLIOptions command line options
 type CLIOptions struct {
@@ -32,28 +32,36 @@ func main() {
 	app := initApp()
 
 	app.Action = func(c *cli.Context) {
+		// Validate arguments
 		opts, err := validateArgs(c)
 		if err != nil {
-			log.Fatalf("[!] %v", err)
+			log.WithFields(log.Fields{
+				"message": err,
+			}).Fatal("invalid arguments")
 		}
 
+    // Parse input, send, and receieve results
 		header, results, err := sendAndReceive(opts.Input)
 		if err != nil {
-			log.Fatalf("[!] %v", err)
+			log.WithFields(log.Fields{
+				"message": err,
+			}).Fatal("error during send and receive")
 		}
 
+    // Check for empty results (not probable)
 		if len(results) < 1 {
-			log.Println("No results!")
-			os.Exit(0)
+			log.Info("No results!")
+			return
 		}
 
+    // Sort and output results
 		sort.Sort(ByASNumber(results))
 
 		// Write to CSV if neecessary
 		if opts.Output != "" {
 			f, err := os.Create(opts.Output)
 			if err != nil {
-				log.Fatalf("[!] %v", err)
+				log.Fatal(err)
 			}
 			defer f.Close()
 
@@ -61,13 +69,15 @@ func main() {
 			header := []string{"AS", "IP", "BGP Prefix", "CC", "Registry", "Allocated", "AS Name"}
 			err = w.Write(header)
 			if err != nil {
-				log.Fatalf("[!] %v", err)
+				log.Fatal(err)
 			}
 			for _, res := range results {
 				w.Write(res.CSVRecord())
 			}
 			w.Flush()
-			log.Printf("Results save to %v", opts.Output)
+			log.WithFields(log.Fields{
+        "path": opts.Output,
+      }).Info("results saved to csv")
 		} else {
 			fmt.Printf(header)
 			for _, res := range results {
@@ -96,9 +106,8 @@ func initApp() *cli.App {
 	return app
 }
 
-func validateArgs(c *cli.Context) (*CLIOptions, error) {
-	opts := new(CLIOptions)
-
+func validateArgs(c *cli.Context) (opts *CLIOptions,  err error) {
+  opts = new(CLIOptions)
 	if len(c.Args()) != 1 {
 		opts.Input = ""
 	} else {
@@ -107,18 +116,17 @@ func validateArgs(c *cli.Context) (*CLIOptions, error) {
 
 	opts.Output = c.String("output")
 
-	return opts, nil
+	return opts, err
 }
 
-func sendAndReceive(input string) (string, []*ASNResult, error) {
+func sendAndReceive(input string) (header string, results []*ASNResult, err error) {
 	var f *os.File
-	results := []*ASNResult{}
-
-	header := "AS      | IP               | BGP Prefix          | CC | Registry | Allocated  | AS Name\n"
+  results = []*ASNResult{}
+	header = "AS      | IP               | BGP Prefix          | CC | Registry | Allocated  | AS Name\n"
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", RemoteHost, RemotePort))
 	if err != nil {
-		return "", nil, fmt.Errorf("Error connecting to %s:%d : %v", RemoteHost, RemotePort, err)
+		return header, results, fmt.Errorf("Error connecting to %s:%d %v", RemoteHost, RemotePort, err)
 	}
 	defer conn.Close()
 
@@ -126,25 +134,25 @@ func sendAndReceive(input string) (string, []*ASNResult, error) {
 	connOpts := []byte("begin\nverbose\n")
 	_, err = conn.Write(connOpts)
 	if err != nil {
-		return "", nil, errors.New("Unable to write to socket")
+		return header, results, errors.New("Unable to write to socket")
 	}
 
 	if input == "" {
 		f = os.Stdin
 		_, err = io.Copy(conn, f)
 		if err != nil {
-			return "", nil, errors.New("Unable to write to socket")
+			return header, results, errors.New("Unable to write to socket")
 		}
 	} else {
 		contents, err := ioutil.ReadFile(input)
 		if err != nil {
-			return "", nil, fmt.Errorf("Error opening input file : %v", err)
+			return header, results, fmt.Errorf("Error opening input file %v", err)
 		}
 		_, err = conn.Write(contents)
 	}
 	_, err = conn.Write([]byte("end\n"))
 	if err != nil {
-		return "", nil, errors.New("Unable to write to socket")
+		return header, results, errors.New("Unable to write to socket")
 	}
 
 	rBulkMode := regexp.MustCompile("(Bulk mode;)")
@@ -156,15 +164,16 @@ func sendAndReceive(input string) (string, []*ASNResult, error) {
 			if !rBulkMode.MatchString(str) {
 				res, err := parseASNResultFromString(str)
 				if err != nil {
-					return "", nil, err
+					return header, results, err
 				}
 				results = append(results, res)
 			}
 		}
 		if err != nil {
-			break
+			err = nil
+      break
 		}
 	}
 
-	return header, results, nil
+	return header, results, err
 }
