@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/codegangsta/cli"
 	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 )
 
 // ip2asn constants
@@ -31,7 +31,7 @@ type CLIOptions struct {
 func main() {
 	app := initApp()
 
-	app.Action = func(c *cli.Context) {
+	app.Action = func(c *cli.Context) error {
 		// Validate arguments
 		opts, err := validateArgs(c)
 		if err != nil {
@@ -40,7 +40,7 @@ func main() {
 			}).Fatal("invalid arguments")
 		}
 
-    // Parse input, send, and receieve results
+		// Parse input, send, and receieve results
 		header, results, err := sendAndReceive(opts.Input)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -48,13 +48,13 @@ func main() {
 			}).Fatal("error during send and receive")
 		}
 
-    // Check for empty results (not probable)
+		// Check for empty results (not probable)
 		if len(results) < 1 {
 			log.Info("No results!")
-			return
+			return nil
 		}
 
-    // Sort and output results
+		// Sort and output results
 		sort.Sort(ByASNumber(results))
 
 		// Write to CSV if neecessary
@@ -76,42 +76,43 @@ func main() {
 			}
 			w.Flush()
 			log.WithFields(log.Fields{
-        "path": opts.Output,
-      }).Info("results saved to csv")
+				"path": opts.Output,
+			}).Info("results saved to csv")
 		} else {
 			fmt.Printf(header)
 			for _, res := range results {
 				fmt.Printf("%s\n", res.String())
 			}
 		}
+
+		return nil
 	}
 
 	app.Run(os.Args)
 }
 
 func initApp() *cli.App {
-	app := cli.NewApp()
-	app.Name = "ip2asn"
-	app.Usage = "ip2asn <input_file>"
-	app.Version = "1.0"
-
-	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:  "output, o",
-			Usage: "CSV output file",
-			Value: "",
+	app := &cli.App{
+		Name:  "ip2asn",
+		Usage: "ip2asn <input_file>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "output, o",
+				Usage: "CSV output file",
+				Value: "",
+			},
 		},
 	}
 
 	return app
 }
 
-func validateArgs(c *cli.Context) (opts *CLIOptions,  err error) {
-  opts = new(CLIOptions)
-	if len(c.Args()) != 1 {
+func validateArgs(c *cli.Context) (opts *CLIOptions, err error) {
+	opts = new(CLIOptions)
+	if c.Args().Len() != 1 {
 		opts.Input = ""
 	} else {
-		opts.Input = c.Args()[0]
+		opts.Input = c.Args().Get(0)
 	}
 
 	opts.Output = c.String("output")
@@ -121,7 +122,7 @@ func validateArgs(c *cli.Context) (opts *CLIOptions,  err error) {
 
 func sendAndReceive(input string) (header string, results []*ASNResult, err error) {
 	var f *os.File
-  results = []*ASNResult{}
+	results = []*ASNResult{}
 	header = "AS      | IP               | BGP Prefix          | CC | Registry | Allocated  | AS Name\n"
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", RemoteHost, RemotePort))
@@ -166,12 +167,14 @@ func sendAndReceive(input string) (header string, results []*ASNResult, err erro
 				if err != nil {
 					return header, results, err
 				}
-				results = append(results, res)
+				if res != nil {
+					results = append(results, res)
+				}
 			}
 		}
 		if err != nil {
 			err = nil
-      break
+			break
 		}
 	}
 

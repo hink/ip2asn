@@ -28,6 +28,9 @@ func (a ByASNumber) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByASNumber) Less(i, j int) bool { return a[i].ASNumber < a[j].ASNumber }
 
 func parseASNResultFromString(s string) (*ASNResult, error) {
+	if strings.Contains(s, "Error:") {
+		return nil, nil
+	}
 	parts := strings.Split(s, "|")
 	allocated, _ := time.Parse("2006-01-02", strings.TrimSpace(parts[5]))
 	asName := ""
