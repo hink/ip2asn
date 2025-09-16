@@ -1,5 +1,7 @@
 ## Overview
 
+Version: 2.0
+
 `ip2asn` is a Go CLI that scans text for IPv4/IPv6 addresses and maps each IP to ASN metadata using Team Cymru's IP-to-ASN service.
 
 - Single IP lookups use the DNS interface.
