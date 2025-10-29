@@ -9,6 +9,83 @@ Version: 2.0
 
 Outputs: table (stdout, default), CSV (`--csv`/`-c`), or JSON (`--json`/`-j`). CSV/JSON can optionally write to a file with `--output`/`-o`.
 
+### Sample Output
+
+Table (`ip2asn input.txt`):
+
+```
+AS       | IP                                      | BGP Prefix             | CC | Registry | Allocated  | AS Name
+13335    | 1.1.1.1                                 | 1.1.1.0/24             | AU | apnic    | 2011-01-01 | CLOUDFLARENET
+13335    | 1.0.0.1                                 | 1.0.0.0/24             | US | arin     | 2012-02-02 | CLOUDFLARENET
+15169    | 8.8.8.8                                 | 8.8.8.0/24             | US | arin     | 1992-12-01 | GOOGLE
+15169    | 2001:4860:4860::8888                    | 2001:4860:4860::/48    | US | arin     | 2006-10-31 | GOOGLE
+```
+
+CSV (`ip2asn --csv input.txt`):
+
+```
+AS,IP,BGP Prefix,CC,Registry,Allocated,AS Name
+13335,1.1.1.1,1.1.1.0/24,AU,apnic,2011-01-01,CLOUDFLARENET
+13335,1.0.0.1,1.0.0.0/24,US,arin,2012-02-02,CLOUDFLARENET
+15169,8.8.8.8,8.8.8.0/24,US,arin,1992-12-01,GOOGLE
+15169,2001:4860:4860::8888,2001:4860:4860::/48,US,arin,2006-10-31,GOOGLE
+```
+
+JSON (`ip2asn --json input.txt`), grouped by ASN:
+
+```json
+[
+  {
+    "asn": 13335,
+    "as_name": "CLOUDFLARENET",
+    "ips": [
+      {
+        "ip": "1.1.1.1",
+        "bgp_prefix": "1.1.1.0/24",
+        "cc": "AU",
+        "registry": "apnic",
+        "allocated": "2011-01-01",
+        "method": "dns",
+        "retrieved": "2024-03-14T15:09:26Z"
+      },
+      {
+        "ip": "1.0.0.1",
+        "bgp_prefix": "1.0.0.0/24",
+        "cc": "US",
+        "registry": "arin",
+        "allocated": "2012-02-02",
+        "method": "dns",
+        "retrieved": "2024-03-14T15:10:26Z"
+      }
+    ]
+  },
+  {
+    "asn": 15169,
+    "as_name": "GOOGLE",
+    "ips": [
+      {
+        "ip": "8.8.8.8",
+        "bgp_prefix": "8.8.8.0/24",
+        "cc": "US",
+        "registry": "arin",
+        "allocated": "1992-12-01",
+        "method": "whois",
+        "retrieved": "2024-03-14T15:11:26Z"
+      },
+      {
+        "ip": "2001:4860:4860::8888",
+        "bgp_prefix": "2001:4860:4860::/48",
+        "cc": "US",
+        "registry": "arin",
+        "allocated": "2006-10-31",
+        "method": "whois",
+        "retrieved": "2024-03-14T15:12:26Z"
+      }
+    ]
+  }
+]
+```
+
 Data source and usage guidelines: Team Cymru IP-to-ASN Mapping.
 
 > IPs that are seen abusing the whois server with large numbers of individual queries instead of using the bulk netcat interface will be null routed. If at all possible you should consider using the DNS based query interface since it is much more efficient for individual queries. The netcat interface should be used for groups of IP lists at a time in one single TCP query.
