@@ -13,7 +13,8 @@ var ipv4Re = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}
 
 // IPv6 regex captures typical and compressed forms (validation via netip afterwards).
 // Note: We intentionally keep this moderately permissive; final validation is done via netip.
-var ipv6Re = regexp.MustCompile(`(?i)\b(?:(?:[0-9a-f]{1,4}:){1,7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:|:(?::[0-9a-f]{1,4}){1,7}|::|(?:[0-9a-f]{1,4}:){6}(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-f]{1,4}:){0,5}:(?:\d{1,3}\.){3}\d{1,3})\b`)
+// Added explicit handling for compressed middle '::' case.
+var ipv6Re = regexp.MustCompile(`(?i)\b(?:(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}:)*[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:|:(?::[0-9a-f]{1,4}){1,7}|::|(?:[0-9a-f]{1,4}:){6}(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-f]{1,4}:){0,5}:(?:\d{1,3}\.){3}\d{1,3})\b`)
 
 // ParseIPs reads from r, extracts IPv4/IPv6 addresses using regex, validates with netip,
 // de-duplicates while preserving first-seen order, and returns them as canonical strings.
