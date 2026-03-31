@@ -8,6 +8,8 @@ import (
 
 func TestGroupResultsByASN(t *testing.T) {
 	ts := time.Date(2024, 3, 14, 15, 9, 26, 0, time.UTC)
+	trueValue := true
+	riskValue := 87
 	input := []model.Result{
 		{
 			ASN:       13335,
@@ -19,6 +21,15 @@ func TestGroupResultsByASN(t *testing.T) {
 			ASName:    "CLOUDFLARENET",
 			Method:    "dns",
 			Retrieved: ts,
+			ProxyCheck: &model.ProxyCheck{
+				VPN:         &trueValue,
+				Compromised: &trueValue,
+				Risk:        &riskValue,
+				VPNProvider: "IVPN",
+				City:        "Sydney",
+				State:       "NSW",
+				Country:     "Australia",
+			},
 		},
 		{
 			ASN:       13335,
@@ -66,7 +77,7 @@ func TestGroupResultsByASN(t *testing.T) {
 		},
 	}
 
-	grouped := GroupResultsByASN(input)
+	grouped := GroupResultsByASN(input, true)
 	if len(grouped) != 2 {
 		t.Fatalf("expected 2 groups, got %d", len(grouped))
 	}
@@ -80,6 +91,12 @@ func TestGroupResultsByASN(t *testing.T) {
 	}
 	if len(first.IPs) != 2 {
 		t.Fatalf("expected 2 IPs for ASN 13335, got %d", len(first.IPs))
+	}
+	if first.IPs[0].ProxyCheck == nil {
+		t.Fatalf("expected first IP to include proxycheck enrichment")
+	}
+	if first.IPs[0].ProxyCheck.VPNProvider != "IVPN" {
+		t.Fatalf("expected VPN provider IVPN, got %s", first.IPs[0].ProxyCheck.VPNProvider)
 	}
 
 	second := grouped[1]
