@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/jedib0t/go-pretty/v6/text"
 
 	"ip2asn/internal/model"
 	"ip2asn/internal/output"
@@ -65,6 +66,13 @@ func TestModelResizeRendersTableAndFooter(t *testing.T) {
 	}
 	if !strings.Contains(view.Content, "q quit") {
 		t.Fatalf("expected help footer in view content, got %q", view.Content)
+	}
+	lines := strings.Split(view.Content, "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected rendered table lines in view content")
+	}
+	if width := text.StringWidthWithoutEscSequences(strings.TrimRight(lines[0], " ")); width >= 160 {
+		t.Fatalf("expected visible table width below window width, got %d: %q", width, lines[0])
 	}
 }
 
