@@ -21,6 +21,7 @@ type TableMode int
 const (
 	TableModeBasic TableMode = iota
 	TableModeProxycheck
+	compactTableExtraWidth = 2
 )
 
 // TableOptions controls how table output is rendered.
@@ -39,7 +40,6 @@ func RenderTable(results []model.Result, opts TableOptions, width int, enableCol
 	tw.SetStyle(tableStyle(enableColor))
 	tw.Style().Box.UnfinishedRow = "…"
 	if layout.width > 0 {
-		tw.Style().Size.WidthMin = layout.width
 		tw.Style().Size.WidthMax = layout.width
 	}
 	tw.SetColumnConfigs(layout.columnConfigs())
@@ -244,7 +244,7 @@ func riskRowColors(proxyCheck *model.ProxyCheck) text.Colors {
 	switch {
 	case *proxyCheck.Risk >= 75:
 		return text.Colors{text.BgHiRed, text.FgBlack}
-	case *proxyCheck.Risk >= 30:
+	case *proxyCheck.Risk >= 50:
 		return text.Colors{text.BgHiYellow, text.FgBlack}
 	default:
 		return nil
@@ -286,12 +286,14 @@ type tableLayout struct {
 }
 
 type tableColumn struct {
-	name    string
-	align   text.Align
-	min     int
-	grow    bool
-	width   int
-	natural int
+	name        string
+	align       text.Align
+	min         int
+	grow        bool
+	width       int
+	natural     int
+	preferExtra bool
+	shrinkFirst bool
 }
 
 func newTableLayout(results []model.Result, mode TableMode, enableColor bool, width int) tableLayout {
@@ -322,7 +324,7 @@ func buildProxycheckColumns(results []model.Result) []tableColumn {
 		{name: "ASN", align: text.AlignRight, min: 3, grow: false},
 		{name: "IP", min: 7, grow: true},
 		{name: "BGP Prefix", min: 10, grow: true},
-		{name: "AS Name", min: 12, grow: true},
+		{name: "AS Name", min: 12, grow: true, preferExtra: true, shrinkFirst: true},
 		{name: "Status", align: text.AlignCenter, min: 6, grow: false},
 		{name: "VPN Provider", min: 8, grow: true},
 		{name: "City", min: 6, grow: true},
@@ -354,7 +356,7 @@ func buildBasicColumns(results []model.Result) []tableColumn {
 		{name: "CC", align: text.AlignCenter, min: 2, grow: false},
 		{name: "Registry", min: 8, grow: true},
 		{name: "Allocated", align: text.AlignCenter, min: 10, grow: false},
-		{name: "AS Name", min: 12, grow: true},
+		{name: "AS Name", min: 12, grow: true, preferExtra: true, shrinkFirst: true},
 	}
 
 	for _, result := range results {
@@ -426,54 +428,57 @@ func (layout *tableLayout) assignWidths() {
 		return
 	}
 
-	total := 0
-	minTotal := 0
-	for _, column := range layout.columns {
-		total += column.width
-		minTotal += column.min
-	}
-
-	if total < available {
-		layout.growToWidth(available - total)
+	total := totalWidths(layout.columns)
+	if total <= available {
+		layout.growPreferred(min(available-total, compactTableExtraWidth))
 		return
 	}
-	if total > available {
-		layout.shrinkToWidth(total - available)
-	}
-	if totalWidths(layout.columns) < available {
-		layout.growToWidth(available - totalWidths(layout.columns))
-	}
+
+	layout.shrinkPreferred(total - available)
 	if totalWidths(layout.columns) > available {
 		layout.shrinkToWidth(totalWidths(layout.columns) - available)
 	}
+
+	minTotal := totalMinWidths(layout.columns)
 	if minTotal > available {
 		layout.forceShrinkToWidth(minTotal - available)
 	}
 }
 
-func (layout *tableLayout) growToWidth(extra int) {
+func (layout *tableLayout) growPreferred(extra int) {
 	if extra <= 0 {
 		return
 	}
 
-	growable := make([]int, 0, len(layout.columns))
+	preferred := make([]int, 0, len(layout.columns))
 	for idx, column := range layout.columns {
-		if column.grow {
-			growable = append(growable, idx)
+		if column.preferExtra {
+			preferred = append(preferred, idx)
 		}
 	}
-	if len(growable) == 0 {
+	if len(preferred) == 0 {
 		return
 	}
 
 	for extra > 0 {
-		for _, idx := range growable {
+		for _, idx := range preferred {
 			layout.columns[idx].width++
 			extra--
 			if extra == 0 {
 				return
 			}
 		}
+	}
+}
+
+func (layout *tableLayout) shrinkPreferred(overflow int) {
+	for overflow > 0 {
+		idx := layout.preferredShrinkableIndex()
+		if idx == -1 {
+			return
+		}
+		layout.columns[idx].width--
+		overflow--
 	}
 }
 
@@ -497,6 +502,25 @@ func (layout *tableLayout) forceShrinkToWidth(overflow int) {
 		layout.columns[idx].width--
 		overflow--
 	}
+}
+
+func (layout tableLayout) preferredShrinkableIndex() int {
+	best := -1
+	bestSlack := -1
+	for idx, column := range layout.columns {
+		if !column.shrinkFirst {
+			continue
+		}
+		slack := column.width - column.min
+		if slack <= 0 {
+			continue
+		}
+		if slack > bestSlack {
+			best = idx
+			bestSlack = slack
+		}
+	}
+	return best
 }
 
 func (layout tableLayout) widestShrinkableIndex() int {
@@ -570,6 +594,14 @@ func totalWidths(columns []tableColumn) int {
 	total := 0
 	for _, column := range columns {
 		total += column.width
+	}
+	return total
+}
+
+func totalMinWidths(columns []tableColumn) int {
+	total := 0
+	for _, column := range columns {
+		total += column.min
 	}
 	return total
 }

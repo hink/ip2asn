@@ -171,7 +171,7 @@ func TestPrintTableProxycheckModeDoesNotRenderSCR(t *testing.T) {
 	}
 }
 
-func TestPrintTableUsesConfiguredWidth(t *testing.T) {
+func TestPrintTableKeepsCompactWidthWhenContentFits(t *testing.T) {
 	t.Setenv("COLUMNS", "100")
 
 	results := []model.Result{
@@ -182,7 +182,7 @@ func TestPrintTableUsesConfiguredWidth(t *testing.T) {
 			CC:        "US",
 			Registry:  "arin",
 			Allocated: "2020-01-01",
-			ASName:    "EXAMPLE-NETWORK-WITH-A-LONG-NAME",
+			ASName:    "TEST-NET",
 		},
 	}
 
@@ -193,8 +193,8 @@ func TestPrintTableUsesConfiguredWidth(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("expected rendered table output")
 	}
-	if width := len([]rune(lines[0])); width != 100 {
-		t.Fatalf("expected top border width 100, got %d: %q", width, lines[0])
+	if width := text.StringWidthWithoutEscSequences(lines[0]); width >= 100 {
+		t.Fatalf("expected compact top border width below 100, got %d: %q", width, lines[0])
 	}
 }
 
@@ -224,6 +224,41 @@ func TestPrintTableAvoidsTruncationWhenWidthAllows(t *testing.T) {
 	}
 	if strings.Contains(rendered, "…") {
 		t.Fatalf("did not expect truncation when enough width is available, got %q", rendered)
+	}
+	if width := firstRenderedLineWidth(rendered); width >= 240 {
+		t.Fatalf("expected rendered table to stay narrower than the terminal, got width %d: %q", width, rendered)
+	}
+}
+
+func TestRenderTableTruncatesASNameBeforeOtherColumns(t *testing.T) {
+	asName := "AN-EXTREMELY-LONG-AUTONOMOUS-SYSTEM-NAME"
+
+	rendered := RenderTable([]model.Result{
+		{
+			ASN:       64512,
+			IP:        "198.51.100.123",
+			BGPPrefix: "198.51.100.0/24",
+			CC:        "US",
+			Registry:  "arin",
+			Allocated: "2020-01-01",
+			ASName:    asName,
+		},
+	}, TableOptions{}, 95, false)
+
+	if !strings.Contains(rendered, "198.51.100.123") {
+		t.Fatalf("expected IP column to stay intact, got %q", rendered)
+	}
+	if !strings.Contains(rendered, "198.51.100.0/24") {
+		t.Fatalf("expected BGP prefix column to stay intact, got %q", rendered)
+	}
+	if !strings.Contains(rendered, "arin") || !strings.Contains(rendered, "2020-01-01") {
+		t.Fatalf("expected non-AS identity fields to stay intact, got %q", rendered)
+	}
+	if strings.Contains(rendered, asName) {
+		t.Fatalf("expected AS name to truncate before other columns, got %q", rendered)
+	}
+	if !strings.Contains(rendered, "…") {
+		t.Fatalf("expected AS name truncation ellipsis, got %q", rendered)
 	}
 }
 
@@ -266,6 +301,43 @@ func TestRenderTableHighlightsRiskRowsInProxycheckMode(t *testing.T) {
 	}
 }
 
+func TestRenderTableOnlyHighlightsYellowAtRisk50AndAbove(t *testing.T) {
+	justBelowYellow := 49
+	atYellow := 50
+
+	rendered := RenderTable([]model.Result{
+		{
+			ASN:       64523,
+			IP:        "198.51.100.23",
+			BGPPrefix: "198.51.100.0/24",
+			ASName:    "BELOW-YELLOW",
+			ProxyCheck: &model.ProxyCheck{
+				Risk: &justBelowYellow,
+			},
+		},
+		{
+			ASN:       64524,
+			IP:        "198.51.100.24",
+			BGPPrefix: "198.51.100.0/24",
+			ASName:    "AT-YELLOW",
+			ProxyCheck: &model.ProxyCheck{
+				Risk: &atYellow,
+			},
+		},
+	}, TableOptions{Mode: TableModeProxycheck}, 180, true)
+
+	yellow := (text.Colors{text.BgHiYellow, text.FgBlack}).EscapeSeq()
+	highlightedRows := 0
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.Contains(line, yellow) {
+			highlightedRows++
+		}
+	}
+	if highlightedRows != 1 {
+		t.Fatalf("expected exactly one yellow-highlighted row at the 50 threshold, got %q", rendered)
+	}
+}
+
 func TestRenderTableDoesNotHighlightRiskRowsOutsideProxycheckMode(t *testing.T) {
 	highRisk := 90
 	result := []model.Result{
@@ -289,4 +361,12 @@ func TestRenderTableDoesNotHighlightRiskRowsOutsideProxycheckMode(t *testing.T) 
 	if strings.Contains(basicRendered, (text.Colors{text.BgHiRed, text.FgBlack}).EscapeSeq()) || strings.Contains(basicRendered, (text.Colors{text.BgHiYellow, text.FgBlack}).EscapeSeq()) {
 		t.Fatalf("did not expect row highlights outside proxycheck mode, got %q", basicRendered)
 	}
+}
+
+func firstRenderedLineWidth(rendered string) int {
+	lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+	if len(lines) == 0 {
+		return 0
+	}
+	return text.StringWidthWithoutEscSequences(lines[0])
 }
